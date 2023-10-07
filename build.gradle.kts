@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.cli.jvm.main
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTargetWithHostTests
 import org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrTarget
@@ -8,85 +9,22 @@ plugins {
 }
 
 kotlin {
-    jvm()
-    macosArm64()
+    val jvmCommon = sourceSets.create("jvmCommon")
+    jvmCommon.dependsOn(sourceSets.getByName("commonMain"))
 
-    targets.all {
-        when (this) {
-            is KotlinJvmTarget -> {
-                withJava()
-                testRuns.create("kotlinCodegen").setExecutionSourceFrom(compilations.create("kotlinCodegenTest"))
-                //testRuns.create("javaCodegen").setExecutionSourceFrom(compilations.create("javaCodegenTest"))
+    jvm {
+        listOf("prod", "dev").forEach {buildType ->
+            val compilation = compilations.create(buildType) {
+                associateWith(compilations.getByName("main"))
             }
-            is KotlinJsIrTarget -> {
-                testRuns.create("kotlinCodegen").setExecutionSourceFrom(compilations.create("kotlinCodegenTest"))
-            }
-            is KotlinNativeTargetWithHostTests -> {
-                val compilation = compilations.create("kotlinCodegenTest")
-                binaries.test("kotlinCodegen") {
-                    this.compilation = compilation
-                }
-                testRuns.create("kotlinCodegen").setExecutionSourceFrom(binaries.getTest("kotlinCodegen", DEBUG))
+            compilation.defaultSourceSet.dependsOn(jvmCommon)
+
+            val runTask = tasks.register("run$buildType", JavaExec::class.java) {
+                classpath(configurations.getByName(compilation.runtimeDependencyConfigurationName))
+                classpath(compilation.output.classesDirs)
+
+                mainClass.set("com.example.HelloKt")
             }
         }
     }
-
-    sourceSets {
-        getByName("commonMain") {
-            dependencies {
-                implementation(kotlin("test"))
-            }
-            kotlin.srcDir("kotlinCodegen")
-        }
-        getByName("jvmMain") {
-            dependencies {
-                implementation("junit:junit:4.13.2")
-            }
-        }
-    }
-
-//    sourceSets {
-//        if (System.getProperty("idea.sync.active") != null) {
-//            /**
-//             * We are in the IDE, create a "fake" sharedTest sourceSet
-//             * And use the kotlinCodegen
-//             */
-//            val sharedTest = create("sharedTest") {
-//                kotlin.srcDir("kotlinCodegen")
-//
-//                dependencies {
-//                    implementation(kotlin(("test")))
-//                }
-//            }
-//            targets.all {
-//              this.compilations.findByName("test")?.defaultSourceSet?.dependsOn(sharedTest)
-//            }
-//        } else {
-//            /**
-//             * Tests using the kotlin codegen
-//             */
-//            getByName("commonTest") {
-//                dependencies {
-//                    implementation(kotlin(("test")))
-//                }
-//                kotlin.apply {
-//                    srcDir("sharedTest")
-//                    srcDir("kotlinCodegen")
-//                }
-//            }
-//
-//            /**
-//             * Same tests but using the javaCodegen under the hood
-//             */
-//            getByName("jvmJavaCodegenTest") {
-//                dependencies {
-//                    implementation(kotlin(("test")))
-//                }
-//                kotlin.apply {
-//                    srcDir("sharedTest")
-//                }
-//            }
-//            java.sourceSets.getByName("javaCodegenTest").java.srcDir("javaCodegen")
-//        }
-//    }
 }
